@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Scrape CFB data from sports-reference.com."""
 
 from __future__ import print_function
@@ -22,7 +21,7 @@ def download_schedule(year):
     logger.info('Getting schedule data for {:d}...'.format(year))
     logger.debug('URL: {:s}'.format(url))
     response = yield AsyncHTTPClient().fetch(url)
-    schedule = pd.read_html(response.body, attrs={'id': 'schedule'})[0]
+    schedule = pd.read_html(response.body.decode('utf-8'), attrs={'id': 'schedule'})[0]
 
     # Get rid of rows that are just repeating the header (which is
     # useful for viewing on an HTML page, but not useful as a table
