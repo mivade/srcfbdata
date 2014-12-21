@@ -56,7 +56,8 @@ def download_schedule(year):
             'LoserPoints': 'HomePoints'},
         inplace=True)
 
-    # TODO: remove unplayed games from the schedule
+    # Remove unplayed games from the schedule
+    schedule = schedule[~schedule.AwayPoints.isnull()]
 
     # Remove unnecessary columns.
     schedule.drop(

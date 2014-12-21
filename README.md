@@ -20,6 +20,14 @@ requirements:
 [Tornado]: tornadoweb.org
 [Pandas]: http://pandas.pydata.org/
 
+Known issues
+------------
+
+Because of the way SR lists teams by "winner" and "loser" columns
+(instead of something like "home" and "away"), this currently will
+always consider the winner of bowl (and other neutral site games) as
+the home team.
+
 License
 -------
 
