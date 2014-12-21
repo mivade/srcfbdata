@@ -60,8 +60,9 @@ def download_schedule(year):
     schedule = schedule[~schedule.AwayPoints.isnull()]
 
     # Remove unnecessary columns.
+    # TODO: Combine time and date columns into one datetime object.
     schedule.drop(
-        ['Rk', 'Week', 'Day', 'HomeOrAway', 'Empty', 'TV', 'Notes'],
+        ['Rk', 'Week', 'Time', 'Day', 'HomeOrAway', 'Empty', 'TV', 'Notes'],
         axis=1, inplace=True)
     
     raise gen.Return(schedule)
