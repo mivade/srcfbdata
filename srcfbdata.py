@@ -1,9 +1,12 @@
 """Get CFB data from sports-reference.com."""
 
+import os.path as osp
 import time
+from datetime import datetime
 import requests
 import bs4
 import pandas as pd
+import click
 
 # A dict of urls to get data from. The keys should be the same as in the
 # metadata dict.
@@ -89,19 +92,10 @@ def process_schedule(df):
 
     df['timestamp'] = [pd.datetime(t.year, t.month, t.day, t.hour, t.minute) for _, t in start.iterrows()]
 
-    # Remove rankings from team names and strip remaining spaces
-    regex = r'\([0-9]+\)'
-    df.home = df.home.str.replace(regex, '').str.lstrip()
-    df.away = df.away.str.replace(regex, '').str.lstrip()
-
     # Make winner -> home and loser -> away
     idx = df.atsign == '@'
     df.loc[idx, 'winner'], df.loc[idx, 'loser'] = df.loc[idx, 'loser'], df.loc[idx, 'winner']
     df.loc[idx, 'pts_winner'], df.loc[idx, 'pts_loser'] = df.loc[idx, 'pts_loser'], df.loc[idx, 'pts_winner']
-
-    # Convert points to numeric data types
-    df.pts_home = df.pts_home.convert_objects(convert_numeric=True)
-    df.pts_away = df.pts_away.convert_objects(convert_numeric=True)
 
     # Drop unneeded columns: week, date, time, day, atsign
     df.drop(['week', 'date', 'time', 'day', 'atsign'], 1, inplace=True)
@@ -109,9 +103,34 @@ def process_schedule(df):
     # Reorder columns
     df = df.reindex(columns=metadata['schedule']['reordered_columns'])
 
+    # Convert points to numeric data types
+    df.pts_home = df.pts_home.convert_objects(convert_numeric=True)
+    df.pts_away = df.pts_away.convert_objects(convert_numeric=True)
+
+    # Remove rankings from team names and strip remaining spaces
+    regex = r'\([0-9]+\)'
+    df.home = df.home.str.replace(regex, '').str.lstrip()
+    df.away = df.away.str.replace(regex, '').str.lstrip()
+
     return df
 
+
+@click.command()
+@click.option('--schedule', default=False, is_flag=True,
+              help='Download a schedule')
+@click.option('--schools', default=False, is_flag=True,
+              help="Download schools' all-time data")
+@click.option('--year', default=datetime.now().year,
+              help='Year to get data for')
+def main(schedule, schools, year):
+    """Retrieve data for a given year."""
+    if schedule:
+        df = get_table('schedule', year)
+        df.to_csv(
+            osp.join('data', 'schedule_{:d}.csv'.format(year)), index=False)
+    if schools:
+        df = get_table('schools')
+        df.to_csv(osp.join('data', 'schools.csv'), index=False)
+
 if __name__ == "__main__":
-    for key in urls:
-        df = get_table(key)
-        df.to_csv('data/{}.csv'.format(key), index=False)
+    main()
