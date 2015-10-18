@@ -1,81 +1,54 @@
-"""Scrape CFB data from sports-reference.com."""
+"""Get CFB data from sports-reference.com."""
 
-from __future__ import print_function
-import logging
-from tornado.httpclient import AsyncHTTPClient
-from tornado import gen, ioloop
+import time
+import requests
+import bs4
 import pandas as pd
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__file__.split('.')[0])
+# A dict of urls to get data from. The keys should be the same as in the
+# metadata dict.
+urls = {
+    'schools': 'http://www.sports-reference.com/cfb/schools/'
+}
 
-def _schedule_url(year):
-    """Build the URL for the schedule for the desired year."""
-    return "http://www.sports-reference.com/cfb/years/{:d}-schedule.html".format(year)
+# Metadata for data tables.
+metadata = {
+    'schools': {
+        'columns': [
+            'school', 'start_year', 'last_year', 'years',
+            'games', 'wins', 'losses', 'ties', 'win_percentage',
+            'bowl_games', 'bowl_wins', 'bowl_losses', 'bowl_ties', 'bowl_percentage',
+            'srs', 'sos', 'ap', 'conference_championships', 'notes'
+        ]
+    }
+}
 
-@gen.coroutine
-def download_schedule(year):
-    """Get the full schedule from the specified year."""
-    assert isinstance(year, int)
-    url = _schedule_url(year)
-    logger.info('Getting schedule data for {:d}...'.format(year))
-    logger.debug('URL: {:s}'.format(url))
-    response = yield AsyncHTTPClient().fetch(url)
-    schedule = pd.read_html(response.body.decode('utf-8'), attrs={'id': 'schedule'})[0]
 
-    # Get rid of rows that are just repeating the header (which is
-    # useful for viewing on an HTML page, but not useful as a table
-    # for manipulation!).
-    schedule = schedule[~schedule.Rk.str.match('Rk')]
+def get_table(dtype):
+    """Get and process the table at the specified URL.
 
-    # Rename columns. This is mostly cosmetic for purposes of making
-    # it more obvious what we're doing to the table later.
-    schedule.rename(
-        columns={
-            'Wk': 'Week',
-            'Winner/Tie': 'Winner',
-            'Pts': 'WinnerPoints',
-            'Unnamed: 7': 'HomeOrAway',
-            'Loser/Tie': 'Loser',
-            'Pts.1': 'LoserPoints',
-            'Unnamed: 12': 'Empty'},
-        inplace=True)
+    Note that this is not generic for *any* table yet and will only work
+    for pages with only one table.
 
-    # Swap team columns so that away is always on the left and home is
-    # always on the right and rename the columns appropriately.
-    home_won = schedule.HomeOrAway.isnull()
-    schedule.Winner[home_won], schedule.Loser[home_won] = schedule.Loser[home_won], schedule.Winner[home_won]
-    schedule.WinnerPoints[home_won], schedule.LoserPoints[home_won] = schedule.LoserPoints[home_won], schedule.WinnerPoints[home_won]
+    """
+    assert dtype in urls
+    print('[{}]'.format(time.ctime()))
+    print('Getting ' + urls[dtype] + '...')
+    html = requests.get(urls[dtype]).content
 
-    # Rename Winner/Loser to Away/Home
-    schedule.rename(
-        columns={
-            'Winner': 'Away',
-            'Loser': 'Home',
-            'WinnerPoints': 'AwayPoints',
-            'LoserPoints': 'HomePoints'},
-        inplace=True)
+    print('Parsing...')
+    soup = bs4.BeautifulSoup(html, 'lxml')
+    table = soup.find_all('table')[0].tbody
+    rows = table.find_all('tr', class_='')
+    print('Finished: [{}]'.format(time.ctime()))
 
-    # Remove unplayed games from the schedule
-    schedule = schedule[~schedule.AwayPoints.isnull()]
-
-    # Remove unnecessary columns.
-    # TODO: Combine time and date columns into one datetime object.
-    schedule.drop(
-        ['Rk', 'Week', 'Time', 'Day', 'HomeOrAway', 'Empty', 'TV', 'Notes'],
-        axis=1, inplace=True)
-    
-    raise gen.Return(schedule)
-
-@gen.coroutine
-def main():
-    """Main function."""
-    schedule = yield download_schedule(2014)
-    schedule.to_csv('schedule_2014.csv', encoding='utf-8', index=False)
+    df = pd.read_html(
+        '<table>' + ''.join([str(row) for row in rows]) + '</table>',
+        index_col=0)[0]
+    df.columns = metadata[dtype]['columns']
+    return df
 
 if __name__ == "__main__":
-    if True:
-        ioloop.IOLoop.instance().run_sync(main)
-    else:
-        schedule = pd.read_html(_schedule_url(2014), attrs={'id': 'schedule'})[0]
-    
+    for key in urls:
+        df = get_table(key)
+        df.to_csv('data/{}.csv'.format(key), index=False)

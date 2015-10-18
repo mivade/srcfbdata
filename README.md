@@ -8,25 +8,22 @@ awesome enough to convert to CSV for you!). This repository simple
 automates the process of downloading and manipulating the tables of
 college football data.
 
+Currently, the following data downloading is implemented:
+
+* Schools: Overview of all "major" schools for their entire history.
+  This includes things like wins/losses.
+
 Requirements
 ------------
 
-This should work on both Python 2.7 and Python 3.4. External
-requirements:
-
-* [Tornado][] for asynchronous data downloading.
-* [Pandas][] for data manipulation.
+* [Pandas][]
+* [Requests][]
+* [Beautiful Soup][]
 
 [Tornado]: tornadoweb.org
 [Pandas]: http://pandas.pydata.org/
-
-Known issues
-------------
-
-Because of the way SR lists teams by "winner" and "loser" columns
-(instead of something like "home" and "away"), this currently will
-always consider the winner of bowl (and other neutral site games) as
-the home team.
+[Requests]: http://docs.python-requests.org/en/latest/
+[Beautiful Soup]: http://www.crummy.com/software/BeautifulSoup/
 
 License
 -------
