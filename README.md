@@ -8,7 +8,7 @@ awesome enough to convert to CSV for you!). This repository simple
 automates the process of downloading and manipulating the tables of
 college football data.
 
-Currently, the following data downloading is implemented:
+Currently, the following data extraction is implemented:
 
 * Schools: Overview of all "major" schools for their entire history.
   This includes things like wins/losses.
