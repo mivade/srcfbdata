@@ -1,14 +1,15 @@
 """Get CFB data from sports-reference.com."""
 
+import os
 import os.path as osp
 import time
+import hashlib
+import functools
 from datetime import datetime
 import argparse
 import requests
 import bs4
 import pandas as pd
-
-debug = False
 
 # A dict of urls to get data from. The keys should be the same as in the
 # metadata dict.
@@ -41,23 +42,42 @@ metadata = {
 }
 
 
-def get_table(dtype, year=None):
+def get_table(dtype, year, args):
     """Get and process the table at the specified URL.
 
     Note that this is not generic for *any* table yet and will only work
     for pages with only one table.
 
     """
-    global debug
     assert dtype in urls
-    assert isinstance(year, int) or year is None
-    if year:
+    assert isinstance(year, int)
+
+    if dtype in ['schedule']:
         url = urls[dtype].format(year=year)
     else:
         url = urls[dtype]
+
+    filename = None
+    if args.debug:
+        try:
+            os.mkdir('.cache')
+        except FileExistsError:
+            pass
+        finally:
+            filename = osp.join(
+                '.cache', hashlib.md5(url.encode()).hexdigest() + '.html')
+
     print('[{}]'.format(time.ctime()))
-    print('GET ' + url)
-    html = requests.get(url).content
+    if args.debug and filename and osp.exists(filename):
+        print('Using cached file for ' + url)
+        with open(filename) as fp:
+            html = fp.read()
+    else:
+        print('GET ' + url)
+        html = requests.get(url).content
+        if args.debug:
+            with open(filename, 'w') as fp:
+                fp.write(html.decode())
 
     print('Parsing...')
     soup = bs4.BeautifulSoup(html, 'lxml')
@@ -70,19 +90,17 @@ def get_table(dtype, year=None):
         index_col=0)[0]
     df.columns = metadata[dtype]['columns']
 
-    if debug:
+    if args.debug:
         print(df.head())
 
     if dtype == 'schedule':
-        df = process_schedule(df)
+        df = process_schedule(df, args)
 
     return df
 
 
-def process_schedule(df):
+def process_schedule(df, args):
     """Do additional processing of schedule data."""
-    global debug
-
     # Combine all date and time columns into a single datetime column.
     dates, times = df.date, df.time
     afternoon = [t.split()[1] for t in times]
@@ -100,10 +118,15 @@ def process_schedule(df):
 
     df['timestamp'] = [pd.datetime(t.year, t.month, t.day, t.hour, t.minute) for _, t in start.iterrows()]
 
+    if args.debug:
+        print(df.head())
+
     # Make winner -> home and loser -> away
     idx = df.atsign == '@'
     df.loc[idx, 'winner'], df.loc[idx, 'loser'] = df.loc[idx, 'loser'], df.loc[idx, 'winner']
     df.loc[idx, 'pts_winner'], df.loc[idx, 'pts_loser'] = df.loc[idx, 'pts_loser'], df.loc[idx, 'pts_winner']
+    if args.debug:
+        print(df.head())
 
     # Drop unneeded columns: week, date, time, day, atsign
     df.drop(['week', 'date', 'time', 'day', 'atsign'], 1, inplace=True)
@@ -124,15 +147,14 @@ def process_schedule(df):
 
 
 def main():
-    global debug
     parser = argparse.ArgumentParser(
         description="Retrieve data for a given year")
     parser.add_argument(
         '-y', '--year', default=datetime.now().year,
         help='Year to get data for (default: this year)')
     parser.add_argument(
-        '-v', '--verbose', default=False, action='store_true',
-        help='Enable verbose output')
+        '-d', '--debug', default=False, action='store_true',
+        help='Enable debug mode')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         '--schedule', action='store_true',
@@ -142,14 +164,14 @@ def main():
         help="Download schools' all-time data.")
     args = parser.parse_args()
 
-    debug = args.verbose
+    get_table_ = functools.partial(get_table, args=args)
 
     if args.schedule:
-        df = get_table('schedule', int(args.year))
+        df = get_table_('schedule', int(args.year))
         df.to_csv(
             osp.join('data', 'schedule_{:}.csv'.format(args.year)), index=False)
     if args.schools:
-        df = get_table('schools')
+        df = get_table_('schools', int(args.year))
         df.to_csv(osp.join('data', 'schools.csv'), index=False)
 
 if __name__ == "__main__":
