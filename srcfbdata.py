@@ -10,6 +10,12 @@ import argparse
 import requests
 import bs4
 import pandas as pd
+try:
+    import colorama
+    colorama.init(autoreset=True)
+    RED = colorama.Fore.RED
+except ImportError:
+    RED = ''
 
 # A dict of urls to get data from. The keys should be the same as in the
 # metadata dict.
@@ -37,7 +43,11 @@ metadata = {
         'reordered_columns': [
             'timestamp', 'home', 'pts_home', 'away', 'pts_away',
             'tv', 'notes'
-        ]
+        ],
+        'renamed_columns': {
+            'winner': 'away', 'pts_winner': 'pts_away',
+            'loser': 'home', 'pts_loser': 'pts_home'
+        }
     }
 }
 
@@ -88,9 +98,14 @@ def get_table(dtype, year, args):
     df = pd.read_html(
         '<table>' + ''.join([str(row) for row in rows]) + '</table>',
         index_col=0)[0]
-    df.columns = metadata[dtype]['columns']
+    if len(df.columns) != len(metadata[dtype]['columns']):
+        cols = [col for col in metadata[dtype]['columns'] if col != 'tv']
+    else:
+        cols = metadata[dtype]['columns']
+    df.columns = cols
 
     if args.debug:
+        print(RED + 'get_table finished')
         print(df.head())
 
     if dtype == 'schedule':
@@ -117,8 +132,8 @@ def process_schedule(df, args):
     start['day'] = dt.dt.day.values
 
     df['timestamp'] = [pd.datetime(t.year, t.month, t.day, t.hour, t.minute) for _, t in start.iterrows()]
-
     if args.debug:
+        print(RED + 'timestamp added')
         print(df.head())
 
     # Make winner -> home and loser -> away
@@ -126,13 +141,26 @@ def process_schedule(df, args):
     df.loc[idx, 'winner'], df.loc[idx, 'loser'] = df.loc[idx, 'loser'], df.loc[idx, 'winner']
     df.loc[idx, 'pts_winner'], df.loc[idx, 'pts_loser'] = df.loc[idx, 'pts_loser'], df.loc[idx, 'pts_winner']
     if args.debug:
+        print(RED + 'winner -> home, loser -> away')
+        print(df.head())
+
+    # Fix column names
+    df.rename(columns=metadata['schedule']['renamed_columns'], inplace=True)
+    if args.debug:
+        print(RED + 'renamed')
         print(df.head())
 
     # Drop unneeded columns: week, date, time, day, atsign
     df.drop(['week', 'date', 'time', 'day', 'atsign'], 1, inplace=True)
+    if args.debug:
+        print(RED + 'dropped')
+        print(df.head())
 
     # Reorder columns
     df = df.reindex(columns=metadata['schedule']['reordered_columns'])
+    if args.debug:
+        print(RED + 'reordered')
+        print(df.head())
 
     # Convert points to numeric data types
     df.pts_home = df.pts_home.convert_objects(convert_numeric=True)
@@ -146,7 +174,7 @@ def process_schedule(df, args):
     return df
 
 
-def main():
+def main(defaults=None):
     parser = argparse.ArgumentParser(
         description="Retrieve data for a given year")
     parser.add_argument(
@@ -162,7 +190,10 @@ def main():
     group.add_argument(
         '--schools', action='store_true',
         help="Download schools' all-time data.")
-    args = parser.parse_args()
+    if defaults:
+        args = parser.parse_args(defaults)
+    else:
+        args = parser.parse_args()
 
     get_table_ = functools.partial(get_table, args=args)
 
