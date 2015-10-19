@@ -3,16 +3,18 @@
 import os.path as osp
 import time
 from datetime import datetime
+import argparse
 import requests
 import bs4
 import pandas as pd
-import click
+
+debug = False
 
 # A dict of urls to get data from. The keys should be the same as in the
 # metadata dict.
 urls = {
     'schools': 'http://www.sports-reference.com/cfb/schools/',
-    'schedule': 'http://www.sports-reference.com/cfb/years/{:d}-schedule.html'
+    'schedule': 'http://www.sports-reference.com/cfb/years/{year:d}-schedule.html'
 }
 
 # Metadata for data tables.
@@ -46,10 +48,11 @@ def get_table(dtype, year=None):
     for pages with only one table.
 
     """
+    global debug
     assert dtype in urls
     assert isinstance(year, int) or year is None
     if year:
-        url = urls[dtype].format(year)
+        url = urls[dtype].format(year=year)
     else:
         url = urls[dtype]
     print('[{}]'.format(time.ctime()))
@@ -59,13 +62,16 @@ def get_table(dtype, year=None):
     print('Parsing...')
     soup = bs4.BeautifulSoup(html, 'lxml')
     table = soup.find_all('table')[0].tbody
-    rows = table.find_all('tr', class_='')
+    rows = table.find_all('tr', class_=lambda cs: cs in ['', 'ranked'])
     print('Finished: [{}]'.format(time.ctime()))
 
     df = pd.read_html(
         '<table>' + ''.join([str(row) for row in rows]) + '</table>',
         index_col=0)[0]
     df.columns = metadata[dtype]['columns']
+
+    if debug:
+        print(df.head())
 
     if dtype == 'schedule':
         df = process_schedule(df)
@@ -75,6 +81,8 @@ def get_table(dtype, year=None):
 
 def process_schedule(df):
     """Do additional processing of schedule data."""
+    global debug
+
     # Combine all date and time columns into a single datetime column.
     dates, times = df.date, df.time
     afternoon = [t.split()[1] for t in times]
@@ -115,20 +123,32 @@ def process_schedule(df):
     return df
 
 
-@click.command()
-@click.option('--schedule', default=False, is_flag=True,
-              help='Download a schedule')
-@click.option('--schools', default=False, is_flag=True,
-              help="Download schools' all-time data")
-@click.option('--year', default=datetime.now().year,
-              help='Year to get data for')
-def main(schedule, schools, year):
-    """Retrieve data for a given year."""
-    if schedule:
-        df = get_table('schedule', year)
+def main():
+    global debug
+    parser = argparse.ArgumentParser(
+        description="Retrieve data for a given year")
+    parser.add_argument(
+        '-y', '--year', default=datetime.now().year,
+        help='Year to get data for (default: this year)')
+    parser.add_argument(
+        '-v', '--verbose', default=False, action='store_true',
+        help='Enable verbose output')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        '--schedule', action='store_true',
+        help='Download a schedule')
+    group.add_argument(
+        '--schools', action='store_true',
+        help="Download schools' all-time data.")
+    args = parser.parse_args()
+
+    debug = args.verbose
+
+    if args.schedule:
+        df = get_table('schedule', int(args.year))
         df.to_csv(
-            osp.join('data', 'schedule_{:d}.csv'.format(year)), index=False)
-    if schools:
+            osp.join('data', 'schedule_{:}.csv'.format(args.year)), index=False)
+    if args.schools:
         df = get_table('schools')
         df.to_csv(osp.join('data', 'schools.csv'), index=False)
 
