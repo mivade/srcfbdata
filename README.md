@@ -18,12 +18,13 @@ Requirements
 
 * [Pandas][]
 * [Requests][]
-* [Beautiful Soup][]
+* [Beautiful Soup][] and [lxml][]
 
 [Tornado]: tornadoweb.org
 [Pandas]: http://pandas.pydata.org/
 [Requests]: http://docs.python-requests.org/en/latest/
 [Beautiful Soup]: http://www.crummy.com/software/BeautifulSoup/
+[lxml]: http://lxml.de/
 
 License
 -------
